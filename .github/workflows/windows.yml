@@ -1,0 +1,107 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+
+    steps:
+      - name: Récupérer le projet
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: devine-le-mot/package.json
+
+      - name: Installer les dépendances
+        working-directory: devine-le-mot
+        run: npm install
+
+      - name: Préparer React Native Windows
+        working-directory: devine-le-mot
+        run: node scripts/setup-native.js windows
+
+      - name: Compiler Windows Release x64
+        working-directory: devine-le-mot
+        run: npx react-native run-windows --release --arch x64 --no-launch --no-deploy --logging
+
+      - name: Rechercher les fichiers générés
+        working-directory: devine-le-mot
+        shell: powershell
+        run: |
+          Write-Host "=== Fichiers EXE ==="
+          Get-ChildItem -Path . -Filter *.exe -Recurse | Select-Object FullName
+
+          Write-Host "=== Packages Windows ==="
+          Get-ChildItem -Path . -Include *.msix,*.msixbundle,*.appx,*.appxbundle -Recurse | Select-Object FullName
+
+      - name: Créer le dossier de distribution
+        working-directory: devine-le-mot
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          $release = Get-ChildItem -Path windows -Directory -Recurse |
+            Where-Object { $_.FullName -match '\\x64\\Release$' } |
+            Select-Object -First 1
+
+          if ($release) {
+            Write-Host "Release trouvée : $($release.FullName)"
+            Copy-Item -Path "$($release.FullName)\*" -Destination dist -Recurse -Force
+          } else {
+            Write-Host "Impossible de trouver automatiquement x64\Release"
+            Get-ChildItem windows -Recurse -Directory | Select-Object FullName
+            exit 1
+          }
+
+      - name: Installer Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Créer l'installateur EXE
+        working-directory: devine-le-mot
+        shell: powershell
+        run: |
+          @"
+          [Setup]
+          AppName=Devine le Mot
+          AppVersion=1.0.0
+          DefaultDirName={autopf}\Devine le Mot
+          DefaultGroupName=Devine le Mot
+          OutputDir=installer-output
+          OutputBaseFilename=DevineLeMot-Setup
+          Compression=lzma
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64
+          UninstallDisplayName=Devine le Mot
+
+          [Files]
+          Source: "dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{autoprograms}\Devine le Mot"; Filename: "{app}\DevineLeMot.exe"
+          Name: "{commondesktop}\Devine le Mot"; Filename: "{app}\DevineLeMot.exe"
+
+          [Run]
+          Filename: "{app}\DevineLeMot.exe"; Description: "Lancer Devine le Mot"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content installer.iss -Encoding UTF8
+
+          New-Item -ItemType Directory -Force -Path installer-output | Out-Null
+
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Publier l'installateur Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: devine-le-mot-windows-installer
+          path: devine-le-mot/installer-output/DevineLeMot-Setup.exe
+          if-no-files-found: error
