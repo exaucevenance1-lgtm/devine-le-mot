@@ -39,7 +39,7 @@ jobs:
 
 
       # ============================================================
-      # 4. Générer le projet Windows
+      # 4. Générer le projet React Native Windows
       # ============================================================
       - name: Préparer React Native Windows
         working-directory: devine-le-mot
@@ -47,65 +47,48 @@ jobs:
 
 
       # ============================================================
-      # 5. Installer les dépendances NuGet du projet Windows
+      # 5. Vérifier la version de React Native Windows
       # ============================================================
-      - name: Restaurer les packages NuGet
+      - name: Vérifier React Native Windows
         working-directory: devine-le-mot
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
-
           Write-Host "=============================================="
-          Write-Host "RESTAURATION DES PACKAGES NUGET"
+          Write-Host "VERSION REACT NATIVE WINDOWS"
           Write-Host "=============================================="
 
-          dotnet nuget locals all --clear
-
-          if (Test-Path "windows") {
-            Get-ChildItem windows -Filter "*.sln" -Recurse |
-              Select-Object FullName
-
-            Get-ChildItem windows -Filter "packages.config" -Recurse |
-              Select-Object FullName
-          }
-
-          Write-Host ""
-          Write-Host "Restauration NuGet..."
-
-          dotnet restore windows
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "La restauration NuGet a échoué."
-            exit $LASTEXITCODE
-          }
-
-          Write-Host ""
-          Write-Host "Restauration NuGet terminée."
+          npm list react-native-windows --depth=0
 
 
       # ============================================================
-      # 6. Afficher les versions Windows App SDK disponibles
+      # 6. Vérifier les packages Windows App SDK déjà disponibles
       # ============================================================
-      - name: Vérifier Windows App SDK
+      - name: Inspecter Windows App SDK
         shell: powershell
         run: |
           Write-Host "=============================================="
-          Write-Host "WINDOWS APP SDK INSTALLÉ"
+          Write-Host "WINDOWS APP SDK"
           Write-Host "=============================================="
 
           $root = "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk"
 
           if (Test-Path $root) {
+            Write-Host "Packages Windows App SDK déjà présents :"
+
             Get-ChildItem $root -Directory |
               Select-Object Name
           }
           else {
-            Write-Host "Le dossier Windows App SDK n'existe pas encore."
+            Write-Host "Aucun package Windows App SDK présent avant le build."
           }
 
 
       # ============================================================
-      # 7. Compiler React Native Windows
+      # 7. Compiler directement avec React Native Windows
+      #
+      # IMPORTANT :
+      # On NE fait PAS de "dotnet restore windows".
+      # Le CLI React Native Windows gère la restauration.
       # ============================================================
       - name: Compiler Windows Release x64
         working-directory: devine-le-mot
@@ -119,7 +102,7 @@ jobs:
 
 
       # ============================================================
-      # 8. Rechercher les fichiers générés
+      # 8. Afficher les fichiers générés
       # ============================================================
       - name: Rechercher les fichiers générés
         working-directory: devine-le-mot
@@ -130,12 +113,18 @@ jobs:
           Write-Host "FICHIERS EXE"
           Write-Host "=============================================="
 
-          Get-ChildItem `
+          $exes = Get-ChildItem `
             -Path . `
             -Filter *.exe `
             -Recurse `
-            -ErrorAction SilentlyContinue |
-            Select-Object FullName
+            -ErrorAction SilentlyContinue
+
+          if ($exes) {
+            $exes | Select-Object FullName, Length
+          }
+          else {
+            Write-Host "Aucun EXE trouvé."
+          }
 
 
           Write-Host ""
@@ -143,16 +132,22 @@ jobs:
           Write-Host "PACKAGES WINDOWS"
           Write-Host "=============================================="
 
-          Get-ChildItem `
+          $packages = Get-ChildItem `
             -Path . `
             -Include *.msix,*.msixbundle,*.appx,*.appxbundle `
             -Recurse `
-            -ErrorAction SilentlyContinue |
-            Select-Object FullName
+            -ErrorAction SilentlyContinue
+
+          if ($packages) {
+            $packages | Select-Object FullName, Length
+          }
+          else {
+            Write-Host "Aucun package MSIX/AppX trouvé."
+          }
 
 
       # ============================================================
-      # 9. Créer le dossier de distribution
+      # 9. Préparer le dossier de distribution
       # ============================================================
       - name: Créer le dossier de distribution
         working-directory: devine-le-mot
@@ -184,7 +179,10 @@ jobs:
           if ($release) {
 
             Write-Host ""
-            Write-Host "Release trouvée :"
+            Write-Host "=============================================="
+            Write-Host "RELEASE TROUVÉE"
+            Write-Host "=============================================="
+
             Write-Host $release.FullName
 
 
@@ -198,10 +196,12 @@ jobs:
           else {
 
             Write-Host ""
-            Write-Host "Impossible de trouver x64\Release."
+            Write-Host "=============================================="
+            Write-Host "RELEASE x64 INTROUVABLE"
+            Write-Host "=============================================="
 
             Write-Host ""
-            Write-Host "Dossiers Windows disponibles :"
+            Write-Host "Arborescence Windows :"
 
             Get-ChildItem `
               windows `
@@ -214,7 +214,9 @@ jobs:
 
 
           Write-Host ""
-          Write-Host "Contenu de dist :"
+          Write-Host "=============================================="
+          Write-Host "CONTENU DE DIST"
+          Write-Host "=============================================="
 
           Get-ChildItem `
             dist `
@@ -241,13 +243,18 @@ jobs:
 
 
           if (-not $exe) {
+
             Write-Error "Aucun fichier EXE trouvé dans dist."
+
             exit 1
           }
 
 
           Write-Host ""
-          Write-Host "EXE trouvé :"
+          Write-Host "=============================================="
+          Write-Host "EXE TROUVÉ"
+          Write-Host "=============================================="
+
           Write-Host $exe.FullName
 
 
@@ -285,6 +292,7 @@ jobs:
 
 
           $distPath = (Resolve-Path dist).Path
+
 
           $relativeExe = $exe.FullName.Substring(
             $distPath.Length + 1
@@ -328,13 +336,15 @@ jobs:
 
 
           Write-Host ""
-          Write-Host "Configuration Inno Setup :"
+          Write-Host "=============================================="
+          Write-Host "INSTALLER.ISS"
+          Write-Host "=============================================="
 
           Get-Content installer.iss
 
 
       # ============================================================
-      # 13. Créer l'installateur EXE
+      # 13. Construire l'installateur EXE
       # ============================================================
       - name: Créer l'installateur EXE
         working-directory: devine-le-mot
@@ -355,13 +365,17 @@ jobs:
 
 
           if ($LASTEXITCODE -ne 0) {
+
             Write-Error "Inno Setup a échoué."
+
             exit $LASTEXITCODE
           }
 
 
           Write-Host ""
-          Write-Host "Installateur créé :"
+          Write-Host "=============================================="
+          Write-Host "INSTALLATEUR CRÉÉ"
+          Write-Host "=============================================="
 
           Get-ChildItem `
             installer-output `
