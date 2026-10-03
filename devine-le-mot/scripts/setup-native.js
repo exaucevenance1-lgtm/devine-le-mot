@@ -104,19 +104,36 @@ function configureAndroidManifest() {
 
   let manifest = fs.readFileSync(manifestPath, 'utf8');
 
-  manifest = manifest.replace(
-    /android:icon="@mipmap\/[^"]+"/,
-    'android:icon="@mipmap/ic_launcher"'
-  );
+  // Configure l'icône principale
+  if (/android:icon="@mipmap\/[^"]+"/.test(manifest)) {
+    manifest = manifest.replace(
+      /android:icon="@mipmap\/[^"]+"/,
+      'android:icon="@mipmap/ic_launcher"'
+    );
+  }
 
-  manifest = manifest.replace(
-    /android:roundIcon="@mipmap\/[^"]+"/,
-    'android:roundIcon="@mipmap/ic_launcher_round"'
-  );
+  // Configure l'icône ronde
+  if (/android:roundIcon="@mipmap\/[^"]+"/.test(manifest)) {
+    manifest = manifest.replace(
+      /android:roundIcon="@mipmap\/[^"]+"/,
+      'android:roundIcon="@mipmap/ic_launcher_round"'
+    );
+  }
+
+  // Ajoute la permission VIBRATE si elle n'existe pas
+  if (!manifest.includes('android.permission.VIBRATE')) {
+    manifest = manifest.replace(
+      '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+      `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.VIBRATE" />`
+    );
+  }
 
   fs.writeFileSync(manifestPath, manifest);
 
   console.log('✅ AndroidManifest.xml configuré.');
+  console.log('✅ Permission VIBRATE configurée.');
 }
 
 /**
