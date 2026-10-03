@@ -27,7 +27,35 @@ if (target === 'android') {
   fs.rmSync(tmp, {recursive: true, force: true});
   sh(`npx --yes @react-native-community/cli@15.0.1 init DevineLeMot --version 0.76.5 --skip-install --skip-git-init --package-name com.devinelemot --directory .tmp-rn`);
   fs.cpSync(path.join(tmp, 'android'), path.join(root, 'android'), {recursive: true});
-  fs.rmSync(tmp, {recursive: true, force: true});
+
+// Autorisation Android nécessaire pour le module Vibration.
+const manifestPath = path.join(
+  root,
+  'android',
+  'app',
+  'src',
+  'main',
+  'AndroidManifest.xml',
+);
+
+if (fs.existsSync(manifestPath)) {
+  let manifest = fs.readFileSync(manifestPath, 'utf8');
+
+  const vibrationPermission =
+    '<uses-permission android:name="android.permission.VIBRATE" />';
+
+  if (!manifest.includes(vibrationPermission)) {
+    manifest = manifest.replace(
+      '<manifest ',
+      `<manifest ${vibrationPermission}\n    `,
+    );
+
+    fs.writeFileSync(manifestPath, manifest);
+    console.log('Permission VIBRATE ajoutée à AndroidManifest.xml');
+  }
+}
+
+fs.rmSync(tmp, {recursive: true, force: true});
   console.log('android/ généré. Prochaine étape : npm install puis npm run build:android');
 } else if (target === 'windows') {
   if (!fs.existsSync(path.join(root, 'node_modules', 'react-native-windows'))) {
