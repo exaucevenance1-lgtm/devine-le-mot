@@ -33,7 +33,7 @@ jobs:
 
       - name: Préparer le projet Android
         working-directory: devine-le-mot
-        run: node scripts/setup-native.js
+        run: node scripts/setup-native.js android
 
       - name: Donner les permissions à Gradle
         working-directory: devine-le-mot/android
