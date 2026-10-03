@@ -1,6 +1,15 @@
 import {Vibration} from 'react-native';
 
-/** Android / iOS : vibration courte. (Windows : voir haptics.windows.ts) */
+/**
+ * Vibration sécurisée.
+ * Une erreur native de vibration ne doit jamais provoquer
+ * la fermeture de l'application.
+ */
 export function vibrate(ms: number): void {
-  Vibration.vibrate(ms);
+  try {
+    Vibration.vibrate(ms);
+  } catch (error) {
+    // La vibration est optionnelle : on ne bloque jamais le jeu.
+    console.warn('Vibration indisponible:', error);
+  }
 }
