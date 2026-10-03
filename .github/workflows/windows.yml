@@ -11,11 +11,13 @@ jobs:
     runs-on: windows-2022
 
     steps:
+
       # ============================================================
       # 1. Récupérer le projet
       # ============================================================
       - name: Récupérer le projet
         uses: actions/checkout@v4
+
 
       # ============================================================
       # 2. Installer Node.js
@@ -27,96 +29,80 @@ jobs:
           cache: npm
           cache-dependency-path: devine-le-mot/package.json
 
+
       # ============================================================
-      # 3. Installer les dépendances JavaScript
+      # 3. Installer les dépendances
       # ============================================================
       - name: Installer les dépendances
         working-directory: devine-le-mot
         run: npm install
 
+
       # ============================================================
-      # 4. Préparer React Native Windows
+      # 4. Générer le projet Windows
       # ============================================================
       - name: Préparer React Native Windows
         working-directory: devine-le-mot
         run: node scripts/setup-native.js windows
 
+
       # ============================================================
-      # 5. Forcer Windows App SDK 1.6
-      #
-      # RNW 0.76 fonctionne avec Windows App SDK 1.6.
-      # Windows App SDK 1.7.x provoque actuellement :
-      #
-      # LNK1104:
-      # lib\win10-\Microsoft.WindowsAppRuntime.Bootstrap.lib
-      #
-      # On installe donc explicitement la version 1.6.
+      # 5. Installer les dépendances NuGet du projet Windows
       # ============================================================
-      - name: Installer Windows App SDK 1.6
+      - name: Restaurer les packages NuGet
+        working-directory: devine-le-mot
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
 
-          $version = "1.6.241114003"
-          $packageRoot = "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk"
-
           Write-Host "=============================================="
-          Write-Host "Installation Windows App SDK $version"
+          Write-Host "RESTAURATION DES PACKAGES NUGET"
           Write-Host "=============================================="
 
           dotnet nuget locals all --clear
 
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.nuget\packages" | Out-Null
+          if (Test-Path "windows") {
+            Get-ChildItem windows -Filter "*.sln" -Recurse |
+              Select-Object FullName
 
-          dotnet nuget install Microsoft.WindowsAppSDK `
-            --version $version `
-            --outputdirectory "$env:USERPROFILE\.nuget\packages" `
-            --source "https://api.nuget.org/v3/index.json"
-
-          Write-Host ""
-          Write-Host "Versions Windows App SDK présentes :"
-
-          if (Test-Path $packageRoot) {
-            Get-ChildItem $packageRoot -Directory |
-              Select-Object Name
+            Get-ChildItem windows -Filter "packages.config" -Recurse |
+              Select-Object FullName
           }
 
+          Write-Host ""
+          Write-Host "Restauration NuGet..."
+
+          dotnet restore windows
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "La restauration NuGet a échoué."
+            exit $LASTEXITCODE
+          }
+
+          Write-Host ""
+          Write-Host "Restauration NuGet terminée."
+
+
       # ============================================================
-      # 6. Vérifier que Windows App SDK 1.6 est bien présent
+      # 6. Afficher les versions Windows App SDK disponibles
       # ============================================================
       - name: Vérifier Windows App SDK
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
+          Write-Host "=============================================="
+          Write-Host "WINDOWS APP SDK INSTALLÉ"
+          Write-Host "=============================================="
 
-          $sdkPath = "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk\1.6.241114003"
+          $root = "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk"
 
-          Write-Host "Recherche du package :"
-          Write-Host $sdkPath
-
-          if (-not (Test-Path $sdkPath)) {
-            Write-Error "Windows App SDK 1.6.241114003 introuvable."
-            exit 1
-          }
-
-          Write-Host ""
-          Write-Host "Windows App SDK 1.6 trouvé."
-
-          $bootstrap = Get-ChildItem `
-            -Path $sdkPath `
-            -Filter "Microsoft.WindowsAppRuntime.Bootstrap.lib" `
-            -Recurse `
-            -ErrorAction SilentlyContinue
-
-          if ($bootstrap) {
-            Write-Host ""
-            Write-Host "Bootstrap library trouvée :"
-            $bootstrap | Select-Object FullName
+          if (Test-Path $root) {
+            Get-ChildItem $root -Directory |
+              Select-Object Name
           }
           else {
-            Write-Error "Microsoft.WindowsAppRuntime.Bootstrap.lib introuvable dans Windows App SDK 1.6."
-            exit 1
+            Write-Host "Le dossier Windows App SDK n'existe pas encore."
           }
+
 
       # ============================================================
       # 7. Compiler React Native Windows
@@ -131,6 +117,7 @@ jobs:
             --no-deploy `
             --logging
 
+
       # ============================================================
       # 8. Rechercher les fichiers générés
       # ============================================================
@@ -138,7 +125,7 @@ jobs:
         working-directory: devine-le-mot
         shell: powershell
         run: |
-          Write-Host ""
+
           Write-Host "=============================================="
           Write-Host "FICHIERS EXE"
           Write-Host "=============================================="
@@ -149,6 +136,7 @@ jobs:
             -Recurse `
             -ErrorAction SilentlyContinue |
             Select-Object FullName
+
 
           Write-Host ""
           Write-Host "=============================================="
@@ -162,6 +150,7 @@ jobs:
             -ErrorAction SilentlyContinue |
             Select-Object FullName
 
+
       # ============================================================
       # 9. Créer le dossier de distribution
       # ============================================================
@@ -169,6 +158,7 @@ jobs:
         working-directory: devine-le-mot
         shell: powershell
         run: |
+
           $ErrorActionPreference = "Stop"
 
           New-Item `
@@ -177,8 +167,9 @@ jobs:
             -Path dist |
             Out-Null
 
-          Write-Host ""
+
           Write-Host "Recherche du dossier Release x64..."
+
 
           $release = Get-ChildItem `
             -Path windows `
@@ -189,11 +180,13 @@ jobs:
             } |
             Select-Object -First 1
 
+
           if ($release) {
 
             Write-Host ""
             Write-Host "Release trouvée :"
             Write-Host $release.FullName
+
 
             Copy-Item `
               -Path "$($release.FullName)\*" `
@@ -205,10 +198,10 @@ jobs:
           else {
 
             Write-Host ""
-            Write-Host "Dossier x64\Release introuvable."
+            Write-Host "Impossible de trouver x64\Release."
 
             Write-Host ""
-            Write-Host "Arborescence Windows :"
+            Write-Host "Dossiers Windows disponibles :"
 
             Get-ChildItem `
               windows `
@@ -219,21 +212,24 @@ jobs:
             exit 1
           }
 
+
           Write-Host ""
-          Write-Host "Contenu du dossier dist :"
+          Write-Host "Contenu de dist :"
 
           Get-ChildItem `
             dist `
             -Recurse |
             Select-Object FullName
 
+
       # ============================================================
-      # 10. Vérifier l'exécutable principal
+      # 10. Vérifier l'EXE
       # ============================================================
       - name: Vérifier l'exécutable Windows
         working-directory: devine-le-mot
         shell: powershell
         run: |
+
           $ErrorActionPreference = "Stop"
 
           $exe = Get-ChildItem `
@@ -243,14 +239,17 @@ jobs:
             -ErrorAction SilentlyContinue |
             Select-Object -First 1
 
+
           if (-not $exe) {
             Write-Error "Aucun fichier EXE trouvé dans dist."
             exit 1
           }
 
+
           Write-Host ""
           Write-Host "EXE trouvé :"
           Write-Host $exe.FullName
+
 
       # ============================================================
       # 11. Installer Inno Setup
@@ -260,14 +259,17 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
 
+
       # ============================================================
-      # 12. Trouver automatiquement l'EXE principal
+      # 12. Préparer Inno Setup
       # ============================================================
       - name: Préparer la configuration Inno Setup
         working-directory: devine-le-mot
         shell: powershell
         run: |
+
           $ErrorActionPreference = "Stop"
+
 
           $exe = Get-ChildItem `
             -Path dist `
@@ -275,16 +277,23 @@ jobs:
             -Recurse |
             Select-Object -First 1
 
+
           if (-not $exe) {
             Write-Error "EXE principal introuvable."
             exit 1
           }
 
+
+          $distPath = (Resolve-Path dist).Path
+
           $relativeExe = $exe.FullName.Substring(
-            (Resolve-Path dist).Path.Length + 1
+            $distPath.Length + 1
           )
 
-          Write-Host "EXE principal : $relativeExe"
+
+          Write-Host "EXE principal :"
+          Write-Host $relativeExe
+
 
           @"
           [Setup]
@@ -317,18 +326,23 @@ jobs:
           Filename: "{app}\$relativeExe"; Description: "Lancer Devine le Mot"; Flags: nowait postinstall skipifsilent
           "@ | Set-Content installer.iss -Encoding UTF8
 
+
           Write-Host ""
-          Write-Host "Configuration Inno Setup créée :"
+          Write-Host "Configuration Inno Setup :"
+
           Get-Content installer.iss
 
+
       # ============================================================
-      # 13. Construire l'installateur EXE
+      # 13. Créer l'installateur EXE
       # ============================================================
       - name: Créer l'installateur EXE
         working-directory: devine-le-mot
         shell: powershell
         run: |
+
           $ErrorActionPreference = "Stop"
+
 
           New-Item `
             -ItemType Directory `
@@ -336,12 +350,15 @@ jobs:
             -Path installer-output |
             Out-Null
 
+
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Inno Setup a échoué."
             exit $LASTEXITCODE
           }
+
 
           Write-Host ""
           Write-Host "Installateur créé :"
@@ -351,8 +368,9 @@ jobs:
             -Filter *.exe |
             Select-Object FullName, Length
 
+
       # ============================================================
-      # 14. Publier l'installateur Windows
+      # 14. Publier l'installateur
       # ============================================================
       - name: Publier l'installateur Windows
         uses: actions/upload-artifact@v4
